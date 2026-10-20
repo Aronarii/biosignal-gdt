@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+ausgabe/
+.DS_Store
+ERKLAERUNG_fuer_Aron.md
