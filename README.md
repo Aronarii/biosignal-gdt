@@ -1,6 +1,6 @@
 # biosignal-gdt
 
-![Tests](https://github.com/GITHUB-NAME/biosignal-gdt/actions/workflows/tests.yml/badge.svg)
+![Tests](https://github.com/Aronarii/biosignal-gdt/actions/workflows/tests.yml/badge.svg)
 
 Pulsanalyse mit GDT-Anbindung an die Praxissoftware: ein kleines Demo-Projekt, das zeigt, wie ein medizinisches Messgerät über die **GDT-Schnittstelle** (Gerätedatenträger, Version 2.1) mit einer Praxisverwaltungssoftware zusammenarbeitet.
 
