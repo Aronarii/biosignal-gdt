@@ -73,7 +73,7 @@ python -m unittest discover -s tests -t .
 
 ## Wie das Projekt entstanden ist
 
-Entwickelt mit **Claude Code** (agentische KI-Programmierung). Fachliche Idee, Anforderungen, Prüfung der Ergebnisse und Tests habe ich verantwortet; den Code habe ich mit der KI erstellt, gelesen und nachvollzogen. Die GDT-Grundlagen habe ich anhand öffentlicher Beschreibungen von Geräteherstellern geprüft.
+Entwickelt mit **Claude Code** (agentische KI-Programmierung). Die Ergebnisse habe ich geprüft und den Code durchgearbeitet. Die GDT-Grundlagen habe ich anhand öffentlicher Beschreibungen von Geräteherstellern geprüft.
 
 Nächste Schritte, die ich mir vorgenommen habe: Austauschordner überwachen, Satzart 6311 (Daten zeigen), Ausgabe zusätzlich als HL7-FHIR-`Observation`.
 
