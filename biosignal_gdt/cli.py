@@ -4,6 +4,7 @@ Beispiele:
     python -m biosignal_gdt pruefen samples/anforderung_6302.gdt
     python -m biosignal_gdt messen samples/anforderung_6302.gdt --synthetisch --aus ausgabe
     python -m biosignal_gdt messen anforderung.gdt --csv bidmc_01_Signals.csv --spalte PLETH --fs 125
+    python -m biosignal_gdt validieren daten/bidmc_csv --aus ausgabe/validierung
 """
 
 from __future__ import annotations
@@ -63,6 +64,16 @@ def cmd_messen(args) -> int:
     return 0 if not pruefung else 1
 
 
+def cmd_validieren(args) -> int:
+    from .validierung import validiere
+
+    text, fenster = validiere(args.ordner, args.aus, args.fenster)
+    print(text)
+    print()
+    print(f"{len(fenster)} Fenster ausgewertet. Ergebnisse in {args.aus}/")
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="biosignal_gdt", description="Pulsanalyse mit GDT-Anbindung (Demo)")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -81,6 +92,12 @@ def main(argv=None) -> int:
     m.add_argument("--hf", type=float, default=72.0, help="Herzfrequenz des Testsignals")
     m.add_argument("--aus", default="ausgabe", help="Ausgabeordner")
     m.set_defaults(func=cmd_messen)
+
+    v = sub.add_parser("validieren", help="Herzfrequenz-Schätzung mit BIDMC-Daten (PhysioNet) gegen den Monitor prüfen")
+    v.add_argument("ordner", help="Ordner mit bidmc_XX_Signals.csv und bidmc_XX_Numerics.csv")
+    v.add_argument("--aus", default="ausgabe/validierung", help="Ausgabeordner")
+    v.add_argument("--fenster", type=float, default=30.0, help="Fensterlänge in Sekunden (Standard: 30)")
+    v.set_defaults(func=cmd_validieren)
 
     args = p.parse_args(argv)
     return args.func(args)

@@ -21,7 +21,7 @@ class Ergebnis:
     fs: float
     dauer_s: float
     n_schlaege: int
-    hf_mittel: float      # Schläge pro Minute
+    hf_mittel: float      # Schläge pro Minute (aus dem Median der RR-Intervalle)
     hf_min: float
     hf_max: float
     sdnn_ms: float        # Standardabweichung der RR-Intervalle
@@ -96,7 +96,21 @@ def grundperiode_s(gefiltert: np.ndarray, fs: float) -> float | None:
     # erster deutlicher Gipfel, der mindestens 80 % des höchsten erreicht
     hoehen = eig["peak_heights"]
     erster = kandidaten[np.argmax(hoehen >= 0.8 * hoehen.max())]
-    return (erster + lo) / fs
+    periode = (erster + lo) / fs
+    # Gegenprobe auf halbe Periode: Bei echten Signalen schwankt die Pulsamplitude oft von
+    # Schlag zu Schlag (z. B. Pulsus alternans, Atmung). Dann ist die Autokorrelation beim
+    # doppelten Schlagabstand höher als beim echten, und die Frequenz würde halbiert.
+    # Liegt genau bei der halben Periode ein eigener deutlicher Gipfel, gilt dieser.
+    # (Die dikrote Welle erzeugt dort keinen Gipfel, sie liegt nur ca. 0,25 s nach dem Hauptgipfel.)
+    halb = periode / 2
+    if halb >= RR_MIN_S:
+        alle, _ = find_peaks(ac[1:hi])
+        alle = alle + 1
+        nahe = alle[np.abs(alle / fs - halb) <= 0.1 * halb]
+        h_periode = ac[int(round(periode * fs))]
+        if nahe.size and ac[nahe].max() >= max(0.15, 0.35 * h_periode):
+            periode = nahe[np.argmax(ac[nahe])] / fs
+    return periode
 
 
 def auswerten(sig: np.ndarray, fs: float) -> Ergebnis:
@@ -124,7 +138,9 @@ def auswerten(sig: np.ndarray, fs: float) -> Ergebnis:
         fs=fs,
         dauer_s=sig.size / fs,
         n_schlaege=int(peaks.size),
-        hf_mittel=float(60.0 / rr_ok.mean()) if rr_ok.size else float("nan"),
+        # Median statt Mittelwert: ein übersehener Schlag erzeugt ein doppelt langes Intervall,
+        # das den Mittelwert verfälscht, den Median kaum (Erkenntnis aus der BIDMC-Validierung).
+        hf_mittel=float(60.0 / np.median(rr_ok)) if rr_ok.size else float("nan"),
         hf_min=float(np.min(hf)),
         hf_max=float(np.max(hf)),
         sdnn_ms=float(np.std(rr_ok, ddof=1) * 1000) if rr_ok.size > 1 else float("nan"),

@@ -42,6 +42,9 @@ python -m biosignal_gdt messen samples/anforderung_6302.gdt --synthetisch --aus 
 # ... oder mit echtem Signal, z. B. PPG aus dem BIDMC-Datensatz (PhysioNet), 125 Hz
 python -m biosignal_gdt messen samples/anforderung_6302.gdt --csv bidmc_01_Signals.csv --spalte PLETH --fs 125
 
+# Validierung mit echten Daten (BIDMC-Datensatz, siehe unten)
+python -m biosignal_gdt validieren daten/bidmc_csv --aus ausgabe/validierung
+
 # Tests
 python -m unittest discover -s tests -t .
 ```
@@ -53,8 +56,9 @@ python -m unittest discover -s tests -t .
 | `biosignal_gdt/gdt.py` | GDT lesen, schreiben, validieren; Satzlänge wird automatisch berechnet |
 | `biosignal_gdt/signal.py` | Filter, Schlagerkennung, HF/HRV, Signalqualität, Testsignal |
 | `biosignal_gdt/workflow.py` | Ablauf 6302 → Auswertung → 6310, Befundtext, Diagramm |
-| `biosignal_gdt/cli.py` | Kommandozeile `pruefen` und `messen` |
-| `tests/` | 16 Tests, u. a. Satzlänge, Umlaute (1 Byte in ANSI), fehlerhafte Zeilen, HF-Genauigkeit von 35 bis 150 /min |
+| `biosignal_gdt/validierung.py` | Vergleich mit echten Daten: Fenster, Referenz, MAE, Bland-Altman, Diagramme |
+| `biosignal_gdt/cli.py` | Kommandozeile `pruefen`, `messen` und `validieren` |
+| `tests/` | 21 Tests, u. a. Satzlänge, Umlaute (1 Byte in ANSI), fehlerhafte Zeilen, HF-Genauigkeit von 35 bis 150 /min, Fälle aus der Validierung |
 
 ## Designentscheidungen
 
@@ -63,13 +67,38 @@ python -m unittest discover -s tests -t .
 - **Zeichensatz bewusst behandelt** (Feld 9206: 2 = CP437, Standard ohne Angabe; 3 = ANSI/Windows-1252): Umlaute in Namen ändern die Zeilenlänge in Bytes.
 - **Gegenprobe bei der Schlagerkennung.** Ein Test bei niedriger Herzfrequenz (40 /min) zeigte, dass die Nebenwelle der Pulskurve (dikrote Welle) als zusätzlicher Schlag gezählt wurde. Seitdem schätzt das Programm den Schlagabstand zusätzlich über die Autokorrelation, passt den Mindestabstand daran an und stuft die Qualität herab, wenn beide Verfahren nicht zusammenpassen. Der Fall ist als Testfall abgesichert.
 
+## Validierung mit echten Daten
+
+Künstliche Signale zeigen nur, dass der Code tut, was ich mir vorgestellt habe. Deshalb habe ich die Herzfrequenz-Schätzung mit echten Aufnahmen geprüft: dem **BIDMC PPG and Respiration Dataset** (PhysioNet), 53 Aufnahmen von Intensivpatienten à 8 Minuten, PPG mit 125 Hz. Als Referenz dient die Herzfrequenz, die der Patientenmonitor aus dem **EKG** bestimmt hat, also eine unabhängige Messmethode.
+
+Vorgehen: Jede Aufnahme wird in 30-s-Fenster zerlegt (848 Fenster), für jedes Fenster wird die Herzfrequenz geschätzt und mit dem Median der Monitorwerte im selben Zeitraum verglichen.
+
+| Signalqualität (eigene Bewertung) | Fenster | MAE [/min] | Bias [/min] | 95-%-Übereinstimmungsgrenzen [/min] | Anteil innerhalb ±5 /min |
+|---|---|---|---|---|---|
+| gut | 838 | 1,1 | −0,4 | −6,7 bis +5,9 | 97 % |
+| eingeschränkt oder unzureichend | 10 | 24,5 | −24,5 | – | 40 % |
+| alle | 848 | 1,4 | −0,7 | −10,2 bis +8,8 | 96 % |
+
+![Bland-Altman](docs/validierung_bland_altman.png)
+
+**Was ich aus den echten Daten gelernt habe**
+
+- **Erster Durchlauf: MAE 3,3 /min, nur 90 % innerhalb ±5 /min.** Viele Fenster lagen bei der halben Herzfrequenz (z. B. 50 statt 110 /min). Ursache: Bei echten Signalen schwankt die Pulsamplitude von Schlag zu Schlag. Dann ist die Autokorrelation beim doppelten Schlagabstand höher als beim echten, und meine Regel gegen die dikrote Welle (aus Teil 1) hat den falschen Abstand gewählt. Lösung: zusätzliche Prüfung, ob genau bei der halben Periode ein eigener Gipfel liegt. Ein Testfall mit wechselnder Amplitude sichert das ab.
+- **Systematisch etwas zu niedrige Werte.** Einzelne schwache Schläge wurden übersehen; das doppelt lange Intervall zog den Mittelwert nach unten. Die Herzfrequenz wird jetzt aus dem **Median** der Schlagabstände berechnet.
+- **Die Qualitätsbewertung trennt brauchbar:** Fenster mit „gut“ liegen zu 97 % innerhalb ±5 /min, die übrigen Fenster sind deutlich unzuverlässiger. Genau dafür ist die Bewertung da: unsichere Werte kennzeichnen statt still übernehmen.
+- **Nicht jede Abweichung ist ein Fehler der Pulsanalyse.** In 4 der 6 Fenster mit „gut“ und mehr als 10 /min Abweichung (Aufnahmen 39 und 41) zeigt auch die Pulsfrequenz des Pulsoximeters den niedrigeren Wert. Dort weichen EKG- und Pulsfrequenz selbst voneinander ab, z. B. weil nicht jeder Herzschlag eine messbare Pulswelle erzeugt.
+
+**Einschränkung:** Beide Anpassungen habe ich anhand dieses Datensatzes entwickelt. Die Werte oben sind daher eher optimistisch; eine Prüfung mit einem zweiten, unabhängigen Datensatz steht noch aus.
+
+Datenquelle: Pimentel M.A.F. et al., *Towards a Robust Estimation of Respiratory Rate from Pulse Oximeters*, IEEE TBME 64(8), 2016; Goldberger A. et al., PhysioBank, PhysioToolkit, and PhysioNet, Circulation 101(23), 2000. Lizenz ODC-By 1.0. Die Daten liegen nicht im Repository; Download unter physionet.org/content/bidmc/1.0.0 und den Ordner `bidmc_csv` nach `daten/` kopieren.
+
 ## Grenzen
 
 - Nur die Felder, die für diesen Ablauf nötig sind, keine vollständige Umsetzung der GDT-Spezifikation.
 - Die Verfahrenskennung `PULS01` (Feld 8402) ist frei gewählt; in echten Systemen wird sie pro Gerät konfiguriert.
 - Keine Dateiüberwachung (Austauschordner), keine Anbindung an eine echte Praxissoftware; der Dateiname folgt nicht der üblichen GDT-Benennung aus Empfänger- und Senderkürzel.
 - Zeichensatz 1 (DIN 66003) wird vereinfacht als ASCII gelesen.
-- Die Schlagerkennung ist auf synthetischen Signalen getestet; echte Signale mit Bewegungsartefakten brauchen weitere Tests.
+- Validiert mit ruhenden Intensivpatienten (BIDMC); Bewegungsartefakte, wie bei Wearables, sind nicht geprüft.
 
 ## Wie das Projekt entstanden ist
 
